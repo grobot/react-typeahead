@@ -68,23 +68,23 @@ if (typeof exports !== 'undefined') {
 // Return all elements of `array` that have a fuzzy
 // match against `pattern`.
 fuzzy.simpleFilter = function(pattern, array) {
-  return array.filter(function(string) {
-    return fuzzy.test(pattern, string);
+  return array.filter(function(str) {
+    return fuzzy.test(pattern, str);
   });
 };
 
-// Does `pattern` fuzzy match `string`?
-fuzzy.test = function(pattern, string) {
-  return fuzzy.match(pattern, string) !== null;
+// Does `pattern` fuzzy match `str`?
+fuzzy.test = function(pattern, str) {
+  return fuzzy.match(pattern, str) !== null;
 };
 
-// If `pattern` matches `string`, wrap each matching character
+// If `pattern` matches `str`, wrap each matching character
 // in `opts.pre` and `opts.post`. If no match, return null
-fuzzy.match = function(pattern, string, opts) {
+fuzzy.match = function(pattern, str, opts) {
   opts = opts || {};
   var patternIdx = 0
     , result = []
-    , len = string.length
+    , len = str.length
     , totalScore = 0
     , currScore = 0
     // prefix
@@ -93,15 +93,15 @@ fuzzy.match = function(pattern, string, opts) {
     , post = opts.post || ''
     // String to compare against. This might be a lowercase version of the
     // raw string
-    , compareString =  opts.caseSensitive && string || string.toLowerCase()
-    , ch, compareChar;
+    , compareString =  opts.caseSensitive && str || str.toLowerCase()
+    , ch;
 
   pattern = opts.caseSensitive && pattern || pattern.toLowerCase();
 
   // For each character in the string, either add it to the result
-  // or wrap in template if its the next string in the pattern
+  // or wrap in template if it's the next string in the pattern
   for(var idx = 0; idx < len; idx++) {
-    ch = string[idx];
+    ch = str[idx];
     if(compareString[idx] === pattern[patternIdx]) {
       ch = pre + ch + post;
       patternIdx += 1;
@@ -117,6 +117,8 @@ fuzzy.match = function(pattern, string, opts) {
 
   // return rendered string if we have a match for every char
   if(patternIdx === pattern.length) {
+    // if the string is an exact match with pattern, totalScore should be maxed
+    totalScore = (compareString === pattern) ? Infinity : totalScore;
     return {rendered: result.join(''), score: totalScore};
   }
 
@@ -141,40 +143,46 @@ fuzzy.match = function(pattern, string, opts) {
 //        // string to put after matching character
 //      , post:    '</b>'
 //
-//        // Optional function. Input is an element from the passed in
-//        // `arr`, output should be the string to test `pattern` against.
+//        // Optional function. Input is an entry in the given arr`,
+//        // output should be the string to test `pattern` against.
 //        // In this example, if `arr = [{crying: 'koala'}]` we would return
 //        // 'koala'.
 //      , extract: function(arg) { return arg.crying; }
 //    }
 fuzzy.filter = function(pattern, arr, opts) {
+  if(!arr || arr.length === 0) {
+    return [];
+  }
+  if (typeof pattern !== 'string') {
+    return arr;
+  }
   opts = opts || {};
   return arr
-          .reduce(function(prev, element, idx, arr) {
-            var str = element;
-            if(opts.extract) {
-              str = opts.extract(element);
-            }
-            var rendered = fuzzy.match(pattern, str, opts);
-            if(rendered != null) {
-              prev[prev.length] = {
-                  string: rendered.rendered
-                , score: rendered.score
-                , index: idx
-                , original: element
-              };
-            }
-            return prev;
-          }, [])
+    .reduce(function(prev, element, idx, arr) {
+      var str = element;
+      if(opts.extract) {
+        str = opts.extract(element);
+      }
+      var rendered = fuzzy.match(pattern, str, opts);
+      if(rendered != null) {
+        prev[prev.length] = {
+            string: rendered.rendered
+          , score: rendered.score
+          , index: idx
+          , original: element
+        };
+      }
+      return prev;
+    }, [])
 
-          // Sort by score. Browsers are inconsistent wrt stable/unstable
-          // sorting, so force stable by using the index in the case of tie.
-          // See http://ofb.net/~sethml/is-sort-stable.html
-          .sort(function(a,b) {
-            var compare = b.score - a.score;
-            if(compare) return compare;
-            return a.index - b.index;
-          });
+    // Sort by score. Browsers are inconsistent wrt stable/unstable
+    // sorting, so force stable by using the index in the case of tie.
+    // See http://ofb.net/~sethml/is-sort-stable.html
+    .sort(function(a,b) {
+      var compare = b.score - a.score;
+      if(compare) return compare;
+      return a.index - b.index;
+    });
 };
 
 
@@ -224,10 +232,10 @@ var KeyEvent = KeyEvent || {};
 KeyEvent.DOM_VK_UP = KeyEvent.DOM_VK_UP || 38;
 KeyEvent.DOM_VK_DOWN = KeyEvent.DOM_VK_DOWN || 40;
 KeyEvent.DOM_VK_BACK_SPACE = KeyEvent.DOM_VK_BACK_SPACE || 8;
-KeyEvent.DOM_VK_RETURN = KeyEvent.DOM_VK_RETURN || 13;
+KeyEvent.DOM_VK_RETURN = KeyEvent.DOM_VK_RETURN || 9;
 KeyEvent.DOM_VK_ENTER = KeyEvent.DOM_VK_ENTER || 14;
 KeyEvent.DOM_VK_ESCAPE = KeyEvent.DOM_VK_ESCAPE || 27;
-KeyEvent.DOM_VK_TAB = KeyEvent.DOM_VK_TAB || 9;
+KeyEvent.DOM_VK_TAB = KeyEvent.DOM_VK_TAB || 13;
 
 module.exports = KeyEvent;
 
@@ -509,7 +517,7 @@ var Token = React.createClass({
           this.props.onRemove(this.props.object);
           event.preventDefault();
         }.bind(this) },
-      '×'
+      '\xD7'
     );
   }
 });
@@ -609,7 +617,10 @@ var Typeahead = React.createClass({
 
       // Keep track of the focus state of the input element, to determine
       // whether to show options when empty (if showOptionsWhenEmpty is true)
-      isFocused: false
+      isFocused: false,
+
+      // true when focused, false onOptionSelected
+      showResults: false
     };
   },
 
@@ -628,7 +639,7 @@ var Typeahead = React.createClass({
     }
 
     var searchOptions = this._generateSearchFunction();
-    return result = searchOptions(value, options);
+    return searchOptions(value, options);
   },
 
   setEntryText: function (value) {
@@ -703,7 +714,8 @@ var Typeahead = React.createClass({
     nEntry.value = optionString;
     this.setState({ searchResults: this.getOptionsForValue(optionString, this.props.options),
       selection: formInputOptionString,
-      entryValue: optionString });
+      entryValue: optionString,
+      showResults: false });
     return this.props.onOptionSelected(option, event);
   },
 
@@ -842,12 +854,12 @@ var Typeahead = React.createClass({
         onFocus: this._onFocus,
         onBlur: this._onBlur
       })),
-      this._renderIncrementalSearchResults()
+      this.state.showResults && this._renderIncrementalSearchResults()
     );
   },
 
   _onFocus: function (event) {
-    this.setState({ isFocused: true }, function () {
+    this.setState({ isFocused: true, showResults: true }, function () {
       this._onTextEntryUpdated();
     }.bind(this));
     if (this.props.onFocus) {
